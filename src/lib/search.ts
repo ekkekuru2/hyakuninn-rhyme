@@ -6,11 +6,16 @@ export type Poem = {
   author: string
   reading: string
   vowels: Vowel[]
+  kanaToVowel: (number | null)[]
 }
+
+export type MatchKind = 'exact' | 'near'
 
 export type ScoredPoem = {
   poem: Poem
   score: number
+  // ヒットした target (poem.vowels) の index → 一致の種類
+  matches: Map<number, MatchKind>
 }
 
 // 「近い母音」: 完全一致でなくても部分的にマッチさせる対象。
@@ -34,45 +39,84 @@ function vowelCost(q: Vowel, t: Vowel): number {
   return COST_FAR
 }
 
-// Needleman-Wunsch 風アラインメント。
-// query の全文字を target の何らかの連続区間にマッチさせる最小コストを返す。
-// - target のどこから始めても良い (dp[0][j] = 0)
-// - target の途中で終わって良い (最後に dp[m][j] の min)
-// - 各マッチは vowelCost、ギャップ (target を skip) は COST_GAP
-function alignCost(query: Vowel[], target: Vowel[]): number {
+// Needleman-Wunsch 風アラインメント + backtracking。
+// query の全文字を target の何らかの連続区間にマッチさせる最小コストと、
+// 採用された target 位置 (とその一致種別) を返す。
+function alignWithMatches(
+  query: Vowel[],
+  target: Vowel[],
+): { score: number; matches: Map<number, MatchKind> } {
   const m = query.length
   const n = target.length
-  if (m === 0) return 0
-  if (m > n) return Infinity
+  if (m === 0) return { score: 0, matches: new Map() }
+  if (m > n) return { score: Infinity, matches: new Map() }
 
-  let prev = new Array<number>(n + 1).fill(0)
-  let curr = new Array<number>(n + 1).fill(Infinity)
+  type Op = 'start' | 'match' | 'gap'
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    new Array<number>(n + 1).fill(Infinity),
+  )
+  const op: Op[][] = Array.from({ length: m + 1 }, () =>
+    new Array<Op>(n + 1).fill('start'),
+  )
+
+  for (let j = 0; j <= n; j++) dp[0][j] = 0 // target のどこから始めても良い
 
   for (let i = 1; i <= m; i++) {
-    curr[0] = Infinity
     for (let j = 1; j <= n; j++) {
-      const viaMatch = prev[j - 1] + vowelCost(query[i - 1], target[j - 1])
-      const viaGap = curr[j - 1] + COST_GAP
-      curr[j] = Math.min(viaMatch, viaGap)
+      const viaMatch = dp[i - 1][j - 1] + vowelCost(query[i - 1], target[j - 1])
+      const viaGap = dp[i][j - 1] + COST_GAP
+      if (viaMatch <= viaGap) {
+        dp[i][j] = viaMatch
+        op[i][j] = 'match'
+      } else {
+        dp[i][j] = viaGap
+        op[i][j] = 'gap'
+      }
     }
-    const tmp = prev
-    prev = curr
-    curr = tmp
   }
 
-  let best = Infinity
-  for (let j = m; j <= n; j++) best = Math.min(best, prev[j])
-  return best
+  let bestScore = Infinity
+  let bestJ = -1
+  for (let j = m; j <= n; j++) {
+    if (dp[m][j] < bestScore) {
+      bestScore = dp[m][j]
+      bestJ = j
+    }
+  }
+  if (bestScore === Infinity || bestJ < 0) {
+    return { score: Infinity, matches: new Map() }
+  }
+
+  const matches = new Map<number, MatchKind>()
+  let i = m
+  let j = bestJ
+  while (i > 0) {
+    if (op[i][j] === 'match') {
+      const tPos = j - 1
+      const kind: MatchKind = query[i - 1] === target[tPos] ? 'exact' : 'near'
+      matches.set(tPos, kind)
+      i--
+      j--
+    } else {
+      j--
+    }
+  }
+
+  return { score: bestScore, matches }
 }
 
 export function search(query: Vowel[], poems: Poem[]): ScoredPoem[] {
   if (query.length === 0) {
-    return poems.map(p => ({ poem: p, score: 0 }))
+    return poems.map(p => ({
+      poem: p,
+      score: 0,
+      matches: new Map<number, MatchKind>(),
+    }))
   }
-  const scored = poems.map(poem => ({
-    poem,
-    score: alignCost(query, poem.vowels),
-  }))
+  const scored = poems.map(poem => {
+    const r = alignWithMatches(query, poem.vowels)
+    return { poem, score: r.score, matches: r.matches }
+  })
   scored.sort((a, b) => a.score - b.score)
   return scored
 }

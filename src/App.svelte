@@ -1,16 +1,20 @@
 <script lang="ts">
-  import { kanaToVowels } from './lib/vowels'
+  import { analyzeKana } from './lib/vowels'
   import { search, parseQuery, type Poem } from './lib/search'
   import { RAW_POEMS } from './data/poems'
 
-  // モジュール初期化時に全 100 首の母音列を計算
-  const poems: Poem[] = RAW_POEMS.map((p, i) => ({
-    id: i + 1,
-    text: p.text,
-    author: p.author,
-    reading: p.reading,
-    vowels: kanaToVowels(p.reading),
-  }))
+  // モジュール初期化時に全 100 首の母音列とかな→母音対応を計算
+  const poems: Poem[] = RAW_POEMS.map((p, i) => {
+    const a = analyzeKana(p.reading)
+    return {
+      id: i + 1,
+      text: p.text,
+      author: p.author,
+      reading: p.reading,
+      vowels: a.vowels,
+      kanaToVowel: a.kanaToVowel,
+    }
+  })
 
   let queryInput = ''
   const limit = 30
@@ -38,6 +42,10 @@
   {#if queryVowels.length > 0}
     <p class="query-display">
       クエリ: <code>{queryVowels.join('')}</code>
+      <span class="legend">
+        <span class="swatch hit-exact"></span>完全一致
+        <span class="swatch hit-near"></span>近い母音
+      </span>
     </p>
   {/if}
 
@@ -52,8 +60,25 @@
           {/if}
         </div>
         <div class="text">{result.poem.text}</div>
-        <div class="reading">{result.poem.reading}</div>
-        <div class="vowels">{result.poem.vowels.join('')}</div>
+        <div class="reading">
+          {#each [...result.poem.reading] as ch, i}
+            {@const vi = result.poem.kanaToVowel[i]}
+            {@const kind = vi != null ? result.matches.get(vi) : undefined}
+            <span
+              class:hit-exact={kind === 'exact'}
+              class:hit-near={kind === 'near'}>{ch}</span
+            >
+          {/each}
+        </div>
+        <div class="vowels">
+          {#each result.poem.vowels as v, i}
+            {@const kind = result.matches.get(i)}
+            <span
+              class:hit-exact={kind === 'exact'}
+              class:hit-near={kind === 'near'}>{v}</span
+            >
+          {/each}
+        </div>
       </li>
     {/each}
   </ol>
@@ -93,6 +118,28 @@
     margin: 0.6rem 0 0;
     font-size: 0.85rem;
     color: #666;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #888;
+  }
+  .swatch {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    border-radius: 2px;
+    vertical-align: -0.1em;
+    margin-right: 0.2rem;
+  }
+  .legend .swatch + .swatch {
+    margin-left: 0.6rem;
   }
   code {
     background: #eef;
@@ -144,5 +191,23 @@
     color: #aaa;
     margin-top: 0.1rem;
     letter-spacing: 0.15em;
+  }
+  /* ハイライト: 完全一致は濃い黄、近い母音は薄い緑 */
+  .hit-exact {
+    background: #ffd54f;
+    color: #3a2700;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  .hit-near {
+    background: #cfe9c8;
+    color: #2b4a26;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  .reading .hit-exact,
+  .reading .hit-near {
+    /* かな部分はもう少し控えめに */
+    padding: 0;
   }
 </style>
