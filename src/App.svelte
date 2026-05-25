@@ -26,8 +26,14 @@
 <main>
   <h1>百人一首 韻検索</h1>
   <p class="subtitle">
+    百人一首の中から、母音の並びが似ている和歌を検索します。
+  </p>
+  <p class="subtitle">
     <code>a</code>, <code>i</code>, <code>u</code>, <code>e</code>,
-    <code>o</code> を入力。fzf 風に飛び飛びでも、母音が少し違ってもヒットします。
+    <code>o</code> を入力。
+  </p>
+  <p>
+    <a href="https://github.com/ekkekuru2/hyakuninn-rhyme"><img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" width="20" height="20">GitHub</a>
   </p>
 
   <input
